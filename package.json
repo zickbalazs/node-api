@@ -6,7 +6,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server",
-    "dev":"nodemon server"
+    "dev": "nodemon server"
   },
   "author": "ZB",
   "license": "ISC",
@@ -18,7 +18,8 @@
     "fs": "0.0.1-security",
     "moment": "^2.29.4",
     "mysql": "^2.18.1",
-    "path": "^0.12.7"
+    "path": "^0.12.7",
+    "sha1": "^1.1.1"
   },
   "devDependencies": {
     "nodemon": "^2.0.20"

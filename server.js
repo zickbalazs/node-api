@@ -3,10 +3,35 @@ const express = require('express');
 const app = require('express')(), port = 3000;
 let mysql = require('mysql');
 const Pool = require('mysql/lib/Pool');
-
-
-
+const token = process.env.token;
+const sha1 = require('sha1');
+const debug = process.env.DEBUG
+const ver = process.env.VER
 app.use(express.urlencoded({extended:true}));
+
+function log(message){
+    if (debug==1){
+        console.log('>>>', message , `[${new Date(new Date().setHours(new Date().getHours() + (new Date().getTimezoneOffset() / 60)*-1)).toISOString()}]`)
+    }
+}
+
+
+function tokenCheck(){
+    return (req, res, next)=>{
+        if (req.headers.authorization=='Basic' + token){
+            log(req.socket.remoteAddress + ' ' + 'Successful Authentication')
+            next();
+        }
+        else {
+            log(req.socket.remoteAddress + ' ' + 'Token error')
+            res.status(500).json({message:'Unauthorized access!'});
+        }
+    }
+}
+
+app.get('/', (req,res)=>{res.status(200).send(ver); log(req.socket.remoteAddress + ' requested version')});
+
+
 
 let connection = mysql.createPool({
     connectionLimit:process.env.DBLIMIT,
@@ -17,21 +42,48 @@ let connection = mysql.createPool({
 });
 
 
+app.post('/logincheck', tokenCheck(), (req,res)=>{
+    let table = req.body.table;
+    let email = req.body.email;
+    let passwd = req.body.passwd;
+    connection.query(`select * from ${table} where email='${email}' and passwd='${sha1(passwd)}'`, (err,data)=>{
+        if (err) res.status(500).send(err.message);
+        else data.length>0 ? res.status(200).send('Successful login!') : res.status(401).send('Incorrect login')
+    })
+})
+
 //get all
-app.get('/:table', (req,res)=>{
+app.get('/:table', tokenCheck(), (req,res)=>{
     connection.query(`select * from ${req.params.table}`,(err,data)=>{
-        if (err) res.status(500).send(err.message)
+        if (err) {
+            log(req.socket.remoteAddress + ' ' + err.message);
+            res.status(500).send(err.message)
+        }
+
         else res.status(200).send(data);
     })
 })
 //get one
-app.get('/:table/:id', (req,res)=>{
+app.get('/:table/:id', tokenCheck(),(req,res)=>{
     connection.query(`select * from ${req.params.table} where id=${req.params.id}`, (err,data)=>{
         if (err) res.status(500).send(err.message);
         else res.status(200).send(data);
     })
 })
-
+//get by field
+app.get('/:table/:field/:value', tokenCheck() ,(req,res)=>{
+    connection.query(`select * from ${req.params.table} where ${req.params.field}='${req.params.value}'`, (err,data)=>{
+        if (err) res.status(500).send(err.message);
+        else res.status(200).send(data);
+    })
+})
+//get by ambigious field
+app.get('/like/:table/:field/:value', tokenCheck(),(req,res)=>{
+    connection.query(`select * from ${req.params.table} where ${req.params.field} like '%${req.params.value}%'`, (err,data)=>{
+        if (err) res.status(500).send(err.message);
+        else res.status(200).send(data);
+    })
+})
 function MapFields(array){
     let str = ``;
     array.forEach(element => {
@@ -40,7 +92,7 @@ function MapFields(array){
     str;
 }
 //insert
-app.post('/:table', (req,res)=>{
+app.post('/:table', tokenCheck(),(req,res)=>{
     let table = req.params.table;
     let records = Object.values(req.body);
     let fields = Object.keys(req.body);
@@ -52,7 +104,7 @@ app.post('/:table', (req,res)=>{
     })
 })
 //update
-app.patch('/:table/:id', (req,res)=>{
+app.patch('/:table/:id', tokenCheck(),(req,res)=>{
     let table = req.params.table;
     let records = Object.values(req.body);
     let fields = Object.keys(req.body);
@@ -70,18 +122,18 @@ app.patch('/:table/:id', (req,res)=>{
     })
 })
 //delete one
-app.delete('/:table/:id', (req,res)=>{
+app.delete('/:table/:id', tokenCheck(),(req,res)=>{
     connection.query(`delete from ${req.params.table} where id=${req.params.id}`, (err, data)=>{
         if (err) res.status(500).send(err.message);
         else res.status(200).send(data);
     })
 })
 //delete all
-app.delete('/:table', (req,res)=>{
+app.delete('/:table', tokenCheck(),(req,res)=>{
     connection.query(`delete from ${req.params.table}`, (err,data)=>{
         if (err) res.status(500).send(err);
         else res.status(200).send(data);
     })
 })
 
-app.listen(port, console.log(`Server: http://localhost:${port}`));
+app.listen(port, log('server started'));
